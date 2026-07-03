@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('call_records', function (Blueprint $table) {
             $table->increments('id');
             $table->string('external_id')->unique();
-            $table->string('direction');
+            $table->string('direction')->default('unknown');
             $table->string('from_number');
             $table->string('to_number');
             $table->unsignedInteger('duration')->default(0);
