@@ -5,6 +5,7 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./krayin-app:/var/www/html
+      - ./packages/Webkul/Zadarma:/var/www/html/packages/Webkul/Zadarma
     depends_on:
       - db
     environment:
@@ -40,6 +41,7 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./krayin-app:/var/www/html
+      - ./packages/Webkul/Zadarma:/var/www/html/packages/Webkul/Zadarma
     command: tail -f /dev/null
 
 volumes:
