@@ -1,0 +1,46 @@
+services:
+  app:
+    build:
+      context: ./docker/php
+    working_dir: /var/www/html
+    volumes:
+      - ./krayin-app:/var/www/html
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_DATABASE=laravel-crm
+      - DB_USERNAME=krayin
+      - DB_PASSWORD=krayin
+
+  webserver:
+    image: nginx:stable-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./krayin-app:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+
+  db:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=laravel-crm
+      - MYSQL_USER=krayin
+      - MYSQL_PASSWORD=krayin
+    volumes:
+      - krayin-db-data:/var/lib/mysql
+
+  node:
+    image: node:20
+    working_dir: /var/www/html
+    volumes:
+      - ./krayin-app:/var/www/html
+    command: tail -f /dev/null
+
+volumes:
+  krayin-db-data:
