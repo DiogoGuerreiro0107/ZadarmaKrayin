@@ -15,4 +15,12 @@ return [
             'sync-mode-info' => 'Set via the ZADARMA_SYNC_MODE environment variable (webhook or polling). This field is informational only.',
         ],
     ],
+
+    'call' => [
+        'button-title' => 'Call :number',
+        'confirm' => 'Call :number now?',
+        'requested' => 'Call requested — your extension will ring first.',
+        'not-active' => 'The Zadarma integration is not active.',
+        'failed' => 'Failed to place the call.',
+    ],
 ];

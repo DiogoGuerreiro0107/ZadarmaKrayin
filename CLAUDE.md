@@ -131,9 +131,9 @@ call_records
 
 ## 6. Funcionalidades (mesmo âmbito do OpenCRM, adaptado à UI do Krayin)
 
-1. **Configurações** (Configuração > Zadarma, via `Config/system.php`): API key/secret (guardar em branco = manter atual), extensão/número do utilizador, modo de sincronização (informativo — o real vem do `.env`), ativar/desativar.
-2. **Botão de ligar**: ícone junto aos campos de telefone nas fichas de Lead/Contacto/Organização do Krayin, com confirmação antes de chamar `POST /v1/request/callback/` (mesma UX do OpenCRM — toca primeiro na extensão do utilizador, depois liga automaticamente ao número).
-3. **Histórico de chamadas**: secção na ficha de Lead/Contacto/Organização listando `call_records` associados (correspondência por número de telefone, tolerante a formatação — reaproveitar a mesma lógica de "últimos 9 dígitos" já validada no OpenCRM).
+1. **Configurações** (Configuração > Zadarma, via `Config/core_config.php` — ver correção na secção 8.1): API key/secret (guardar em branco = manter atual), extensão/número do utilizador, modo de sincronização (informativo — o real vem do `.env`), ativar/desativar.
+2. **Botão de ligar**: ícone junto aos campos de telefone nas fichas de Lead e de Person (Contacto) do Krayin — **não** existe campo de telefone em `Organization` nesta versão (ver secção 8.5), por isso não há botão aí — com confirmação antes de chamar `POST /v1/request/callback/` (mesma UX do OpenCRM — toca primeiro na extensão do utilizador, depois liga automaticamente ao número).
+3. **Histórico de chamadas**: secção na ficha de Lead/Person listando `call_records` associados (correspondência por número de telefone, tolerante a formatação — reaproveitar a mesma lógica de "últimos 9 dígitos" já validada no OpenCRM).
 4. **Sincronização**: conforme o modo escolhido (secção 3).
 
 ---
@@ -147,7 +147,7 @@ call_records
 | 2 | `ZadarmaClient` (assinatura HMAC) + página de Configurações (`Config/system.php`) — sem ligar nada ainda, só guardar/ler credenciais |
 | 3 | Modo `polling`: `SyncCallsCommand` + agendamento no `Kernel.php` |
 | 4 | Modo `webhook`: rota pública protegida + validação de origem/assinatura + registo do URL na conta Zadarma |
-| 5 | Botão de ligar (click-to-call) na UI Vue das fichas de Lead/Contacto/Organização |
+| 5 | Botão de ligar (click-to-call) nas fichas de Lead e Person (não existe telefone em Organization, ver secção 8.5) |
 | 6 | Secção de histórico de chamadas nas mesmas fichas |
 | 7 | Validar os dois modos (idealmente com uma conta Zadarma de testes real, já que este projeto — ao contrário da build inicial do OpenCRM — pode e deve ser testado em modo `webhook` com um túnel público, ex. `ngrok`, durante o desenvolvimento) |
 
@@ -213,6 +213,15 @@ Isto requer que a integração WSL do Docker Desktop esteja ativa para a distro 
   - Pedido sem `signature` → 403. Pedido com `signature` errada → 403. Pedido com assinatura correta (calculada com o `api_secret` guardado) → 200 e cria/atualiza o `call_records` correto — testado com um payload sintético (não uma notificação real da Zadarma).
   - Rota registada **sem** o grupo de middleware `web` (logo sem CSRF a interferir) — é um callback máquina-a-máquina, não um pedido de browser. Se algum dia precisar de estar dentro de `web` por outro motivo, usar `\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::except([...])` (método estático confirmado no Laravel 12 instalado) em vez de editar `krayin-app/bootstrap/app.php`.
 - **Precedente real seguido**: o package `Webkul\WebForm` (formulários web públicos) já tem `Routes/routes.php` + `Http/Controllers` próprios carregados via `loadRoutesFrom()` no seu ServiceProvider — confirma que a estrutura planeada na secção 5 (rotas/controllers dentro do próprio package Zadarma, não centralizados no `Admin`) é um padrão real e não uma invenção nossa.
+
+### 8.5 Confirmado na Fase 5 (2026-07-04): botão de ligar
+
+- **Endpoint confirmado via documentação oficial**: `GET /v1/request/callback/`, parâmetros obrigatórios `from` (extensão/número que toca primeiro) e `to` (número a marcar), opcionais `sip`/`predicted`. Resposta `{"status":"success","from":...,"to":...,"time":...}` — corresponde exatamente à UX descrita na secção 6 ("toca primeiro na extensão, depois liga ao número").
+- **Correção à secção 6**: `Organization` (`organizations` table) **não tem nenhum campo de telefone** — só `name` e `address` (JSON). O botão de ligar só faz sentido em `Lead` (via a `Person` associada) e na própria ficha de `Person` — não existe "telefone da organização" nesta versão do Krayin para ter um botão.
+- **Mecanismo de extensão usado (sem editar ficheiros do Admin core)**: o helper `view_render_event($eventName, $params)` (em `Webkul\Core\Http\helpers.php`) dispara um evento Laravel (`Event::dispatch($eventName, $viewRenderEventManager)`) e qualquer package pode ouvir esse evento e chamar `$manager->addTemplate('namespace::view.path')` para injetar uma view num ponto específico de uma view core, sem a copiar/sobrepor. Usados os hooks reais `admin.leads.view.person.contact_numbers.after` (ficha de Lead) e `admin.contacts.persons.view.attributes.form_controls.attributes_view.after` (ficha de Person) — confirmados lendo `leads/view/person.blade.php` e `contacts/persons/view/attributes.blade.php`. Nenhum package do próprio Krayin usa `addTemplate` internamente (não há um exemplo real para copiar), mas o mecanismo em si está bem definido e documentado no código do `Core`.
+- **Limitação do hook**: cada `view_render_event(...)` dispara **uma vez** no ponto onde está escrito na view, não uma vez por item de uma lista — por isso o nosso template injetado (`zadarma::components.call-button`) itera ele próprio `$person->contact_numbers` (recebendo `$lead`/`$person` dos parâmetros do evento original), em vez de assumir que seria chamado por número.
+- **Ícone confirmado**: `icon-call` existe na fonte de ícones do Admin (`grep` confirmado em `assets/css`).
+- Testado via `curl` autenticado (a extensão do Chrome estava com o mesmo problema de deteção "idle" das fases anteriores): o botão renderiza corretamente na ficha de Person com o número certo (`<v-zadarma-call-button number="+351 91 000 00 00">`); o pedido de chamada devolve 422 com mensagem clara quando a integração não está ativa, e 500 com mensagem clara (sem stack trace exposto) quando as credenciais são inválidas — não testado com uma chamada real (precisa de conta Zadarma real, Fase 7).
 
 ## 9. Notas de segurança
 
