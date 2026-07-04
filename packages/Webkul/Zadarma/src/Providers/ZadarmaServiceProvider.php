@@ -2,7 +2,9 @@
 
 namespace Webkul\Zadarma\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Webkul\Zadarma\Console\Commands\SyncCallsCommand;
 
@@ -22,6 +24,16 @@ class ZadarmaServiceProvider extends ServiceProvider
                 ->everyTenMinutes()
                 ->when(fn () => config('zadarma.sync_mode') === 'polling');
         });
+
+        // The public webhook route only exists at all when explicitly running
+        // in webhook mode — never registered based on a DB toggle, to avoid
+        // accidentally exposing it on an installation that is only reachable
+        // locally.
+        if (config('zadarma.sync_mode') === 'webhook') {
+            RateLimiter::for('zadarma-webhook', fn () => Limit::perMinute(60));
+
+            $this->loadRoutesFrom(__DIR__.'/../Routes/routes.php');
+        }
     }
 
     /**

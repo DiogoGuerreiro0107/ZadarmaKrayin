@@ -2,6 +2,7 @@
 
 namespace Webkul\Zadarma\Services;
 
+use Illuminate\Support\Facades\Log;
 use Webkul\Contact\Models\Person;
 use Webkul\Zadarma\Models\CallRecord;
 
@@ -12,10 +13,20 @@ class CallRecordSync
      * Person by phone number. Shared between polling (Zadarma statistics
      * API) and webhook (Zadarma call events) discovery paths.
      *
+     * Returns null (without writing anything) if the payload has no usable
+     * external_id, since call_records.external_id is unique and every call
+     * without one would otherwise collide on the same row.
+     *
      * @param  array{external_id: string, direction: string, from_number: string, to_number: string, duration: int, disposition: ?string, recording_url: ?string, started_at: ?string}  $call
      */
-    public function upsert(array $call): CallRecord
+    public function upsert(array $call): ?CallRecord
     {
+        if (($call['external_id'] ?? '') === '') {
+            Log::warning('Zadarma: skipping call record with no external_id.', $call);
+
+            return null;
+        }
+
         $matchNumber = $call['direction'] === 'outbound'
             ? ($call['to_number'] ?? null)
             : ($call['from_number'] ?? null);
