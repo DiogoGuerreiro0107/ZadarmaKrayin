@@ -25,7 +25,7 @@ class ZadarmaServiceProvider extends ServiceProvider
 
         $this->loadRoutesFrom(__DIR__.'/../Routes/admin-routes.php');
 
-        $this->registerCallButtonHooks();
+        $this->registerViewHooks();
 
         $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command(SyncCallsCommand::class)
@@ -45,20 +45,28 @@ class ZadarmaServiceProvider extends ServiceProvider
     }
 
     /**
-     * Inject the call button next to a Person's phone numbers on the Lead
-     * view (via the attached person) and on the Person's own view page,
-     * using Krayin's view_render_event hook points instead of overriding
-     * either core Blade view.
+     * Inject the call button and call history next to a Person's phone
+     * numbers on the Lead view (via the attached person) and on the
+     * Person's own view page, using Krayin's view_render_event hook points
+     * instead of overriding either core Blade view.
      */
-    protected function registerCallButtonHooks(): void
+    protected function registerViewHooks(): void
     {
         $addCallButton = function (ViewRenderEventManager $manager) {
             $manager->addTemplate('zadarma::components.call-button');
         };
 
-        Event::listen('admin.leads.view.person.contact_numbers.after', $addCallButton);
+        $addCallHistory = function (ViewRenderEventManager $manager) {
+            $manager->addTemplate('zadarma::components.call-history');
+        };
 
-        Event::listen('admin.contacts.persons.view.attributes.form_controls.attributes_view.after', $addCallButton);
+        foreach ([
+            'admin.leads.view.person.contact_numbers.after',
+            'admin.contacts.persons.view.attributes.form_controls.attributes_view.after',
+        ] as $hook) {
+            Event::listen($hook, $addCallButton);
+            Event::listen($hook, $addCallHistory);
+        }
     }
 
     /**

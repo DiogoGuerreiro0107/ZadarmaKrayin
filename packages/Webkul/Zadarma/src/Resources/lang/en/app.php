@@ -23,4 +23,9 @@ return [
         'not-active' => 'The Zadarma integration is not active.',
         'failed' => 'Failed to place the call.',
     ],
+
+    'history' => [
+        'title' => 'Call History',
+        'recording' => 'Download recording',
+    ],
 ];
