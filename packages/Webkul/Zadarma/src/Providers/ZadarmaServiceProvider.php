@@ -67,6 +67,10 @@ class ZadarmaServiceProvider extends ServiceProvider
             Event::listen($hook, $addCallButton);
             Event::listen($hook, $addCallHistory);
         }
+
+        Event::listen('admin.user.account.right.after', function (ViewRenderEventManager $manager) {
+            $manager->addTemplate('zadarma::components.my-extension');
+        });
     }
 
     /**
@@ -77,6 +81,10 @@ class ZadarmaServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../Config/zadarma.php', 'zadarma');
 
         $this->mergeConfigFrom(__DIR__.'/../Config/core_config.php', 'core_config');
+
+        $this->mergeConfigFrom(__DIR__.'/../Config/menu.php', 'menu.admin');
+
+        $this->mergeConfigFrom(__DIR__.'/../Config/acl.php', 'acl');
 
         if ($this->app->runningInConsole()) {
             $this->commands([

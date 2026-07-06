@@ -64,6 +64,7 @@ class WebhookController
             'disposition' => $request->input('disposition'),
             'recording_url' => null,
             'started_at' => $request->input('call_start'),
+            'sip' => $request->input('internal', $request->input('sip')),
         ]);
     }
 }

@@ -28,4 +28,25 @@ return [
         'title' => 'Call History',
         'recording' => 'Download recording',
     ],
+
+    'my-extension' => [
+        'title' => 'Zadarma Extension',
+        'info' => 'Set your own extension to use it instead of the shared one when you place a call.',
+        'label' => 'My Extension',
+        'placeholder' => 'e.g. 110',
+        'save-btn' => 'Save',
+        'saved' => 'Extension saved.',
+        'cleared' => 'Extension cleared — the shared extension will be used instead.',
+    ],
+
+    'reports' => [
+        'title' => 'Zadarma Reports',
+        'filter-user' => 'User',
+        'all-users' => 'All users',
+        'calls-per-day' => 'Calls per day',
+        'duration-per-day' => 'Call duration per day (minutes)',
+        'inbound' => 'Inbound',
+        'outbound' => 'Outbound',
+        'unknown-direction' => 'Unknown direction',
+    ],
 ];

@@ -248,3 +248,30 @@ Isto requer que a integração WSL do Docker Desktop esteja ativa para a distro 
 - Em modo `webhook`, tratar a rota pública como fronteira de confiança: validar, limitar taxa, e nunca escrever diretamente em `call_records` sem validar a origem do pedido.
 - Nunca imprimir `api_key`/`api_secret` em logs, terminal ou commits.
 - **Limitação conhecida, herdada do Krayin (não introduzida por nós, Fase 2):** o mecanismo genérico `admin::configuration.field-type` injeta o valor atual de qualquer campo (incluindo `type: password`) diretamente no HTML da página de edição (`value="{{ $value }}"` passado ao componente Vue) — o mesmo acontece com o campo de password do IMAP nativo do Krayin. Ou seja, um admin autenticado com acesso à página de Configuração consegue ver o `api_key`/`api_secret` em claro via "Ver código-fonte"/DevTools, mesmo que o input apareça mascarado visualmente. Corrigir isto exigiria um `type: 'blade'` custom (mecanismo que existe mas não tem nenhum uso real nos packages do Krayin para copiar) — decidido não fazer isso na Fase 2 por ser fora do âmbito de um package de terceiros (seria preciso substituir comportamento do `Admin` core) e por ser uma exposição limitada a admins já autenticados, não pública. Revisitar se o utilizador pedir mais robustez aqui.
+
+---
+
+## 10. Extensão pós-roadmap (2026-07-06): extensão por utilizador + relatórios
+
+Pedido do utilizador, fora do âmbito das 7 fases originais: cada utilizador Krayin poder configurar a sua própria extensão Zadarma (em vez de uma única partilhada), e uma página de estatísticas com gráficos diários por utilizador.
+
+### Decisões de arquitetura
+
+- **Extensão por utilizador é aditiva, não substitui a global**: cada utilizador pode configurar a sua própria extensão; quem não configurar continua a usar a extensão partilhada de `Configuration > Zadarma` como reserva. Ordem de resolução em `CallController::store()`: `UserExtension` do utilizador autenticado → `zadarma.settings.credentials.caller_extension` (global).
+- **Tabela própria `zadarma_user_extensions`** (`user_id` único + `extension`), em vez de adicionar uma coluna à tabela `users` do Krayin (evita tocar em tabelas core, consistente com a prática de todo o resto do package).
+- **Atribuição de chamadas a utilizadores via `sip`**: o campo `sip` que já vem em `/v1/statistics/` (confirmado real na Fase 7) é comparado contra `zadarma_user_extensions.extension` em `CallRecordSync::matchUser()`, preenchendo `call_records.user_id`. Para o modo webhook, tentamos os campos `internal`/`sip` do payload da notificação (best-effort, tal como o resto do mapeamento de webhook — ver secção 8.4).
+- **Chamadas antigas (sincronizadas antes desta funcionalidade existir) ficam com `user_id = null`** — não há reprocessamento retroativo. Só chamadas sincronizadas depois desta alteração são atribuídas a um utilizador.
+
+### UI
+
+- **Extensão pessoal**: injetada na página "My Account" (`user/account/edit.blade.php`) via hook `admin.user.account.right.after`. **Não é um campo dentro do formulário principal da conta** — esse formulário exige sempre `current_password` para gravar (confirmado lendo `AccountController::update()`), o que seria mau UX só para guardar uma extensão. É um mini-componente Vue autónomo (`v-zadarma-my-extension`) com o seu próprio endpoint (`PUT admin/zadarma/my-extension`), tal como o botão de ligar.
+- **Página de relatórios** (`GET admin/zadarma/reports`, novo item de menu "Zadarma Reports", `Config/menu.php`+`Config/acl.php` próprios — primeira vez que o package precisou de menu/ACL, todas as fases anteriores só estenderam páginas existentes via hooks): dois gráficos **Chart.js** (confirmado ser a biblioteca usada pelo dashboard nativo do Krayin, lendo `dashboard/index/revenue.blade.php` — mesmo padrão replicado: `new Chart(document.getElementById(id), {type: 'bar', data: {labels, datasets}, ...})`), "Calls per day" e "Call duration per day", cada um com 3 séries empilhadas (inbound/outbound/**unknown**). A série "unknown" foi incluída deliberadamente: como `/v1/statistics/` não devolve direção (limitação conhecida da Fase 3), qualquer chamada sincronizada por polling sem direção resolvida ficaria invisível nos gráficos se só houvesse inbound/outbound — a chamada real sincronizada na Fase 7 é precisamente um exemplo disto.
+- Filtro por utilizador (dropdown "All users" + lista de `Webkul\User\Models\User`), endpoint de dados `GET admin/zadarma/reports/data` devolve JSON com 30 dias completos (dias sem chamadas aparecem como zero, não ficam em falta).
+
+### Testado
+
+- Prioridade extensão pessoal > global confirmada via tinker (trocando o valor pessoal e confirmando que prevalece).
+- Atribuição por `sip` confirmada via `CallRecordSync::upsert()` com payloads sintéticos (`sip` correspondente → `user_id` certo; `sip` desconhecido → `user_id` null).
+- Extensão pessoal gravada e lida com sucesso via `curl` autenticado (`PUT admin/zadarma/my-extension`), visível corretamente na página de perfil.
+- Página e endpoint de relatórios testados via `curl` autenticado: JSON com 30 dias, zero-preenchido, mostra corretamente a chamada real da Fase 7 (com direção "unknown", exatamente como esperado) e responde corretamente ao filtro por utilizador.
+- **Não testado**: atribuição de utilizador com uma sincronização real nova (a única chamada real existente na base de dados foi sincronizada antes desta funcionalidade existir, por isso tem `user_id = null` — comportamento correto, não um bug).

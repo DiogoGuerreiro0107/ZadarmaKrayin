@@ -127,6 +127,7 @@ class SyncCallsCommand extends Command
             'disposition' => $call['disposition'] ?? null,
             'recording_url' => null,
             'started_at' => $call['callstart'] ?? null,
+            'sip' => $call['sip'] ?? null,
         ];
     }
 }

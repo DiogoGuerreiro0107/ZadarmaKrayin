@@ -6,6 +6,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Throwable;
+use Webkul\Zadarma\Models\UserExtension;
 use Webkul\Zadarma\Services\ZadarmaClient;
 
 class CallController
@@ -31,7 +32,11 @@ class CallController
             ], 422);
         }
 
-        $extension = system_config()->getConfigData('zadarma.settings.credentials.caller_extension');
+        // The user's own extension takes priority; fall back to the shared
+        // extension configured in Configuration > Zadarma when they haven't
+        // set a personal one.
+        $extension = UserExtension::where('user_id', auth()->id())->value('extension')
+            ?? system_config()->getConfigData('zadarma.settings.credentials.caller_extension');
 
         try {
             $response = $this->client->request('/v1/request/callback/', [

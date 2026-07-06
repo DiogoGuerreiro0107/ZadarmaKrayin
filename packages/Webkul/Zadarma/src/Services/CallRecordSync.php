@@ -5,6 +5,7 @@ namespace Webkul\Zadarma\Services;
 use Illuminate\Support\Facades\Log;
 use Webkul\Contact\Models\Person;
 use Webkul\Zadarma\Models\CallRecord;
+use Webkul\Zadarma\Models\UserExtension;
 
 class CallRecordSync
 {
@@ -17,7 +18,7 @@ class CallRecordSync
      * external_id, since call_records.external_id is unique and every call
      * without one would otherwise collide on the same row.
      *
-     * @param  array{external_id: string, direction: string, from_number: string, to_number: string, duration: int, disposition: ?string, recording_url: ?string, started_at: ?string}  $call
+     * @param  array{external_id: string, direction: string, from_number: string, to_number: string, duration: int, disposition: ?string, recording_url: ?string, started_at: ?string, sip: ?string}  $call
      */
     public function upsert(array $call): ?CallRecord
     {
@@ -42,8 +43,18 @@ class CallRecordSync
                 'recording_url' => $call['recording_url'] ?? null,
                 'started_at' => $call['started_at'] ?? null,
                 'person_id' => $matchNumber ? $this->matchPerson($matchNumber) : null,
+                'user_id' => ! empty($call['sip']) ? $this->matchUser($call['sip']) : null,
             ]
         );
+    }
+
+    /**
+     * Find the Krayin user whose personal extension matches the SIP/extension
+     * a call was handled on.
+     */
+    public function matchUser(string $sip): ?int
+    {
+        return UserExtension::where('extension', $sip)->value('user_id');
     }
 
     /**
