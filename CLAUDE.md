@@ -275,3 +275,23 @@ Pedido do utilizador, fora do âmbito das 7 fases originais: cada utilizador Kra
 - Extensão pessoal gravada e lida com sucesso via `curl` autenticado (`PUT admin/zadarma/my-extension`), visível corretamente na página de perfil.
 - Página e endpoint de relatórios testados via `curl` autenticado: JSON com 30 dias, zero-preenchido, mostra corretamente a chamada real da Fase 7 (com direção "unknown", exatamente como esperado) e responde corretamente ao filtro por utilizador.
 - **Não testado**: atribuição de utilizador com uma sincronização real nova (a única chamada real existente na base de dados foi sincronizada antes desta funcionalidade existir, por isso tem `user_id = null` — comportamento correto, não um bug).
+
+### 10.1 Correção (2026-07-06): Chart.js não carregava na página de relatórios
+
+- **Bug encontrado pelo utilizador**: os gráficos apareciam vazios/não funcionavam na página `admin/zadarma/reports`.
+- **Causa**: o Chart.js **não é** carregado globalmente no `app.js` do admin — só a própria view `dashboard/index.blade.php` inclui `<script type="module" src="{{ vite()->asset('js/chart.js') }}">` (confirmado lendo o ficheiro: é literalmente o bundle UMD do Chart.js v4.4.0, servido através do pipeline Vite do Admin, não um wrapper próprio). Como a nossa página de relatórios não incluía este script, `window.Chart` estava `undefined` e `new Chart(...)` falhava silenciosamente (sem erro visível na página, só na consola).
+- **Correção**: adicionada a mesma tag `<script type="module" src="{{ vite()->asset('js/chart.js') }}"></script>` a `reports/index.blade.php`, antes do componente Vue. `vite()` é um helper global (`Webkul\Core\Http\helpers.php`) que resolve o manifesto do Admin, por isso funciona a partir do nosso próprio package sem precisarmos de build Vite próprio.
+- Testado no browser: `typeof window.Chart === 'function'` e `Chart.getChart(canvas)` devolve uma instância real para os dois canvas (`zadarma_calls_chart`/`zadarma_duration_chart`) depois da correção.
+- **Lição para páginas de admin futuras**: nem todo o JS "global" do admin Krayin está realmente no bundle principal — bibliotecas maiores como o Chart.js são carregadas por página, não centralizadas. Confirmar sempre onde uma biblioteca é carregada antes de assumir que está disponível globalmente.
+
+### 10.2 Correção de dados (2026-07-06): extensão real é 102, não 110
+
+O valor de extensão usado nos testes da Fase 7 (`110`) e depois configurado (global + pessoal do utilizador) estava desatualizado — o utilizador confirmou que a extensão real a usar é `102`. Atualizado em `core_config` (`zadarma.settings.credentials.caller_extension`) e em `zadarma_user_extensions` (utilizador atual).
+
+### 10.3 Prefixo de encaminhamento de saída (2026-07-06)
+
+Pedido do utilizador: replicar no click-to-call o mesmo hábito que já têm ao marcar manualmente no telemóvel — antepor `0001` ao número do cliente antes de pedir a chamada, para a central mostrar o número principal da empresa como identificador de chamada (CallerID) em vez do número direto.
+
+- Novo valor de configuração `zadarma.outbound_prefix` (`Config/zadarma.php`, env `ZADARMA_OUTBOUND_PREFIX`, default `'0001'`) — configurável sem alterar código, já que é uma regra específica da central telefónica desta conta, não um comportamento genérico da Zadarma.
+- `CallController::store()` antepõe este prefixo ao número (`to`) antes de pedir `/v1/request/callback/`. Aplicado sempre, sem opção de desativar por chamada — decisão explícita do utilizador ("aplica sempre automaticamente").
+- **Não confirmado ainda com uma chamada real** que o CallerID mostrado ao cliente fica de facto correto (o utilizador optou por aplicar diretamente em vez de pedir um teste real primeiro) — se o CallerID aparecer errado num uso real, verificar aqui primeiro.

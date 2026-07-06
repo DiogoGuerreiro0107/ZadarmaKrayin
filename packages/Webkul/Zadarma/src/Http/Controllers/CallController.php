@@ -38,10 +38,15 @@ class CallController
         $extension = UserExtension::where('user_id', auth()->id())->value('extension')
             ?? system_config()->getConfigData('zadarma.settings.credentials.caller_extension');
 
+        // Prepend the outbound routing prefix so the call goes out showing
+        // the company's main caller ID, mirroring how calls are already
+        // dialed manually from the mobile app.
+        $to = config('zadarma.outbound_prefix').$request->input('to');
+
         try {
             $response = $this->client->request('/v1/request/callback/', [
                 'from' => $extension,
-                'to' => $request->input('to'),
+                'to' => $to,
             ]);
         } catch (Throwable $exception) {
             Log::error('Zadarma click-to-call request failed.', ['exception' => $exception->getMessage()]);

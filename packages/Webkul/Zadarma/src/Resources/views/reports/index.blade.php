@@ -14,6 +14,14 @@
     </div>
 
     @pushOnce('scripts')
+        {{-- Chart.js is only bundled/loaded by the dashboard page's own view
+             (packages/Webkul/Admin/src/Resources/views/dashboard/index.blade.php),
+             not the global admin app.js — load it here too. --}}
+        <script
+            type="module"
+            src="{{ vite()->asset('js/chart.js') }}"
+        ></script>
+
         <script
             type="text/x-template"
             id="v-zadarma-reports-template"
