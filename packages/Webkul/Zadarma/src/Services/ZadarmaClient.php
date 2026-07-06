@@ -31,11 +31,17 @@ class ZadarmaClient
 
         $paramsString = http_build_query($params);
 
+        // Pass the already-built string (not the array) so Guzzle appends it
+        // verbatim instead of re-encoding it with its own query aggregator —
+        // otherwise the bytes actually sent (e.g. RFC3986 %20 for spaces)
+        // can differ from paramsString (RFC1738 '+'), invalidating the
+        // signature even with correct credentials.
         $response = $this->http->request($httpMethod, $method, [
-            'query' => $httpMethod === 'GET' ? $params : [],
-            'form_params' => $httpMethod !== 'GET' ? $params : [],
+            'query' => $httpMethod === 'GET' ? $paramsString : '',
+            'body' => $httpMethod !== 'GET' ? $paramsString : null,
             'headers' => [
                 'Authorization' => $this->apiKey.':'.$this->sign($method, $paramsString),
+                'Content-Type' => 'application/x-www-form-urlencoded',
             ],
         ]);
 
@@ -43,13 +49,14 @@ class ZadarmaClient
     }
 
     /**
-     * Sign a request per Zadarma's HMAC-SHA1 scheme:
-     * base64(hmac_sha1(method + sorted_params_string + md5(sorted_params_string), apiSecret)).
+     * Sign a request per Zadarma's HMAC-SHA1 scheme (matches the official
+     * PHP example exactly: hash_hmac() WITHOUT raw-binary output — i.e. the
+     * hex digest is what gets base64-encoded, not the raw bytes).
      */
     public function sign(string $method, string $paramsString): string
     {
         $md5Params = md5($paramsString);
 
-        return base64_encode(hash_hmac('sha1', $method.$paramsString.$md5Params, (string) $this->apiSecret, true));
+        return base64_encode(hash_hmac('sha1', $method.$paramsString.$md5Params, (string) $this->apiSecret));
     }
 }

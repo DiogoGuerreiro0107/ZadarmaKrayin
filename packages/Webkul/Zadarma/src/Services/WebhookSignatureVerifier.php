@@ -36,7 +36,7 @@ class WebhookSignatureVerifier
 
         $paramsString = http_build_query($params);
 
-        $expected = base64_encode(hash_hmac('sha1', $paramsString, $this->apiSecret, true));
+        $expected = base64_encode(hash_hmac('sha1', $paramsString, $this->apiSecret));
 
         return hash_equals($expected, $signature);
     }
