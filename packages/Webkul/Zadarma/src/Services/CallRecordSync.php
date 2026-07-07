@@ -2,7 +2,9 @@
 
 namespace Webkul\Zadarma\Services;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Webkul\Activity\Models\Activity;
 use Webkul\Contact\Models\Person;
 use Webkul\Zadarma\Models\CallRecord;
 use Webkul\Zadarma\Models\UserExtension;
@@ -32,7 +34,7 @@ class CallRecordSync
             ? ($call['to_number'] ?? null)
             : ($call['from_number'] ?? null);
 
-        return CallRecord::updateOrCreate(
+        $record = CallRecord::updateOrCreate(
             ['external_id' => $call['external_id']],
             [
                 'direction' => $call['direction'] ?? 'unknown',
@@ -46,6 +48,67 @@ class CallRecordSync
                 'user_id' => ! empty($call['sip']) ? $this->matchUser($call['sip']) : null,
             ]
         );
+
+        $this->logActivity($record);
+
+        return $record;
+    }
+
+    /**
+     * Log the call as a Krayin Activity (type=call) attached to the matched
+     * Person, so it shows up alongside notes/meetings in the native
+     * Activities feature — not just our own Call History section.
+     *
+     * Only attached to the Person (never to a Lead): a person can have
+     * several leads and call_records only resolves person_id, so there is
+     * no reliable way to pick "the" lead a call belongs to.
+     *
+     * Idempotent via call_records.activity_id: re-processing the same call
+     * (e.g. a repeated webhook notification, or an overlapping polling
+     * window) updates the existing Activity instead of creating a duplicate.
+     */
+    protected function logActivity(CallRecord $record): void
+    {
+        if (! $record->person_id) {
+            return;
+        }
+
+        $startedAt = $record->started_at ? Carbon::parse($record->started_at) : now();
+        $endedAt = $startedAt->copy()->addSeconds($record->duration ?: 0);
+
+        $number = $record->direction === 'outbound' ? $record->to_number : $record->from_number;
+
+        $comment = sprintf(
+            '%s call with %s — duration %s, disposition: %s',
+            ucfirst($record->direction),
+            $number,
+            gmdate('H:i:s', $record->duration ?: 0),
+            $record->disposition ?? 'unknown'
+        );
+
+        if ($record->activity_id) {
+            Activity::whereKey($record->activity_id)->update([
+                'comment' => $comment,
+                'schedule_to' => $endedAt,
+                'is_done' => true,
+            ]);
+
+            return;
+        }
+
+        $activity = Activity::create([
+            'type' => 'call',
+            'title' => ucfirst($record->direction).' call with '.$number,
+            'comment' => $comment,
+            'schedule_from' => $startedAt,
+            'schedule_to' => $endedAt,
+            'is_done' => true,
+            'user_id' => $record->user_id,
+        ]);
+
+        $activity->persons()->attach($record->person_id);
+
+        $record->update(['activity_id' => $activity->id]);
     }
 
     /**

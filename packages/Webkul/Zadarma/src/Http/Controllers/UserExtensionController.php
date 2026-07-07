@@ -18,11 +18,13 @@ class UserExtensionController
     {
         $request->validate([
             'extension' => ['nullable', 'string', 'max:20'],
+            'outbound_prefix' => ['nullable', 'string', 'max:20'],
         ]);
 
         $extension = trim((string) $request->input('extension'));
+        $outboundPrefix = trim((string) $request->input('outbound_prefix'));
 
-        if ($extension === '') {
+        if ($extension === '' && $outboundPrefix === '') {
             UserExtension::where('user_id', auth()->id())->delete();
 
             return response()->json([
@@ -32,7 +34,10 @@ class UserExtensionController
 
         UserExtension::updateOrCreate(
             ['user_id' => auth()->id()],
-            ['extension' => $extension]
+            [
+                'extension' => $extension !== '' ? $extension : null,
+                'outbound_prefix' => $outboundPrefix !== '' ? $outboundPrefix : null,
+            ]
         );
 
         return response()->json([

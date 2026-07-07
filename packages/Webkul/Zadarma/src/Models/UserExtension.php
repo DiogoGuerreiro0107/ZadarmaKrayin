@@ -23,6 +23,7 @@ class UserExtension extends Model
     protected $fillable = [
         'user_id',
         'extension',
+        'outbound_prefix',
     ];
 
     /**

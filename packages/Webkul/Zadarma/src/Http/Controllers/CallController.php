@@ -32,16 +32,21 @@ class CallController
             ], 422);
         }
 
-        // The user's own extension takes priority; fall back to the shared
-        // extension configured in Configuration > Zadarma when they haven't
-        // set a personal one.
-        $extension = UserExtension::where('user_id', auth()->id())->value('extension')
+        // The user's own extension/prefix take priority; fall back to the
+        // shared extension (Configuration > Zadarma) and the app-wide
+        // default prefix when they haven't set personal ones.
+        $userExtension = UserExtension::where('user_id', auth()->id())->first();
+
+        $extension = $userExtension?->extension
             ?? system_config()->getConfigData('zadarma.settings.credentials.caller_extension');
+
+        $outboundPrefix = $userExtension?->outbound_prefix
+            ?? config('zadarma.outbound_prefix');
 
         // Prepend the outbound routing prefix so the call goes out showing
         // the company's main caller ID, mirroring how calls are already
         // dialed manually from the mobile app.
-        $to = config('zadarma.outbound_prefix').$request->input('to');
+        $to = $outboundPrefix.$request->input('to');
 
         try {
             $response = $this->client->request('/v1/request/callback/', [

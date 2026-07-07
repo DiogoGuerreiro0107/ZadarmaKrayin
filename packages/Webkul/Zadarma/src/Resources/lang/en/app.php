@@ -37,6 +37,9 @@ return [
         'save-btn' => 'Save',
         'saved' => 'Extension saved.',
         'cleared' => 'Extension cleared — the shared extension will be used instead.',
+        'prefix-label' => 'My Outbound Prefix',
+        'prefix-placeholder' => 'e.g. 0001',
+        'prefix-info' => 'Prepended to the number before placing a call. Leave blank to use the app-wide default.',
     ],
 
     'reports' => [

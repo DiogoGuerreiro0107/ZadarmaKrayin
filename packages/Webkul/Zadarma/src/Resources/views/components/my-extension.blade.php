@@ -1,5 +1,5 @@
 @php
-    $zadarmaMyExtension = \Webkul\Zadarma\Models\UserExtension::where('user_id', $user->id)->value('extension');
+    $zadarmaUserExtension = \Webkul\Zadarma\Models\UserExtension::where('user_id', $user->id)->first();
 @endphp
 
 <div class="flex w-[360px] max-w-full flex-col gap-2 max-md:w-full">
@@ -11,7 +11,10 @@
         </x-slot>
 
         <x-slot:content>
-            <v-zadarma-my-extension extension="{{ $zadarmaMyExtension }}"></v-zadarma-my-extension>
+            <v-zadarma-my-extension
+                extension="{{ $zadarmaUserExtension?->extension }}"
+                outbound-prefix="{{ $zadarmaUserExtension?->outbound_prefix }}"
+            ></v-zadarma-my-extension>
         </x-slot>
     </x-admin::accordion>
 </div>
@@ -39,6 +42,23 @@
                 />
             </x-admin::form.control-group>
 
+            <x-admin::form.control-group class="!mb-0">
+                <x-admin::form.control-group.label>
+                    @lang('zadarma::app.my-extension.prefix-label')
+                </x-admin::form.control-group.label>
+
+                <input
+                    type="text"
+                    v-model="outboundPrefixValue"
+                    class="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+                    placeholder="@lang('zadarma::app.my-extension.prefix-placeholder')"
+                />
+
+                <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                    @lang('zadarma::app.my-extension.prefix-info')
+                </p>
+            </x-admin::form.control-group>
+
             <div class="flex justify-end">
                 <button
                     type="button"
@@ -61,11 +81,17 @@
                     type: String,
                     default: '',
                 },
+
+                outboundPrefix: {
+                    type: String,
+                    default: '',
+                },
             },
 
             data() {
                 return {
                     extensionValue: this.extension,
+                    outboundPrefixValue: this.outboundPrefix,
                     isSaving: false,
                 };
             },
@@ -74,7 +100,10 @@
                 save() {
                     this.isSaving = true;
 
-                    this.$axios.put('{{ route('admin.zadarma.my-extension.update') }}', { extension: this.extensionValue })
+                    this.$axios.put('{{ route('admin.zadarma.my-extension.update') }}', {
+                            extension: this.extensionValue,
+                            outbound_prefix: this.outboundPrefixValue,
+                        })
                         .then((response) => {
                             this.$emitter.emit('add-flash', { type: 'success', message: response.data.message });
                         })

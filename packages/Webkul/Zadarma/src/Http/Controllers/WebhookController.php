@@ -5,8 +5,10 @@ namespace Webkul\Zadarma\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Webkul\Zadarma\Models\CallRecord;
 use Webkul\Zadarma\Services\CallRecordSync;
 use Webkul\Zadarma\Services\WebhookSignatureVerifier;
+use Webkul\Zadarma\Services\ZadarmaClient;
 
 /**
  * Receives Zadarma PBX call event notifications (NOTIFY_START, NOTIFY_INTERNAL,
@@ -21,6 +23,7 @@ class WebhookController
     public function __construct(
         protected WebhookSignatureVerifier $verifier,
         protected CallRecordSync $callRecordSync,
+        protected ZadarmaClient $client,
     ) {}
 
     public function handle(Request $request): Response
@@ -42,6 +45,7 @@ class WebhookController
 
         match ($event) {
             'NOTIFY_END', 'NOTIFY_OUT_END' => $this->handleCallEnd($request, $event),
+            'NOTIFY_RECORD' => $this->handleRecordReady($request),
             default => null,
         };
 
@@ -66,5 +70,31 @@ class WebhookController
             'started_at' => $request->input('call_start'),
             'sip' => $request->input('internal', $request->input('sip')),
         ]);
+    }
+
+    /**
+     * NOTIFY_RECORD fires once a call recording has finished processing —
+     * fetch its download link now rather than at NOTIFY_END, since the
+     * recording likely isn't ready yet at that point.
+     */
+    protected function handleRecordReady(Request $request): void
+    {
+        $externalId = (string) $request->input('pbx_call_id', $request->input('call_id', ''));
+
+        if ($externalId === '') {
+            return;
+        }
+
+        $record = CallRecord::where('external_id', $externalId)->first();
+
+        if (! $record || $record->recording_url) {
+            return;
+        }
+
+        $link = $this->client->getRecordingLink($externalId);
+
+        if ($link) {
+            $record->update(['recording_url' => $link]);
+        }
     }
 }

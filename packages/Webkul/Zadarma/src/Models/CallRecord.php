@@ -4,6 +4,7 @@ namespace Webkul\Zadarma\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Webkul\Activity\Models\Activity;
 use Webkul\Contact\Models\Person;
 use Webkul\User\Models\User;
 
@@ -31,6 +32,7 @@ class CallRecord extends Model
         'recording_url',
         'person_id',
         'user_id',
+        'activity_id',
         'started_at',
     ];
 
@@ -59,5 +61,13 @@ class CallRecord extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * Get the Krayin Activity (type=call) logged for this call, if any.
+     */
+    public function activity(): BelongsTo
+    {
+        return $this->belongsTo(Activity::class, 'activity_id');
     }
 }

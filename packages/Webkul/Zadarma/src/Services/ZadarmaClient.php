@@ -59,4 +59,27 @@ class ZadarmaClient
 
         return base64_encode(hash_hmac('sha1', $method.$paramsString.$md5Params, (string) $this->apiSecret));
     }
+
+    /**
+     * Fetch a temporary download link for a call recording via
+     * GET /v1/pbx/record/request/. Returns null if the call has no
+     * recording (or the request otherwise fails) — this is expected for
+     * plenty of calls (missed, not recorded, etc.), not an error condition.
+     */
+    public function getRecordingLink(string $callId): ?string
+    {
+        try {
+            $response = $this->request('/v1/pbx/record/request/', [
+                'call_id' => $callId,
+            ]);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (($response['status'] ?? null) !== 'success') {
+            return null;
+        }
+
+        return $response['link'] ?? ($response['links'][0] ?? null);
+    }
 }

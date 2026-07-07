@@ -67,7 +67,18 @@ class SyncCallsCommand extends Command
                 $calls = $response['stats'] ?? [];
 
                 foreach ($calls as $call) {
-                    $callRecordSync->upsert($this->normalize($call));
+                    $record = $callRecordSync->upsert($this->normalize($call));
+
+                    // A call with no talk time was never answered, so it
+                    // can't have a recording — skip the extra API round
+                    // trip for those.
+                    if ($record && ! $record->recording_url && $record->duration > 0) {
+                        $link = $client->getRecordingLink($record->external_id);
+
+                        if ($link) {
+                            $record->update(['recording_url' => $link]);
+                        }
+                    }
 
                     $synced++;
                 }
