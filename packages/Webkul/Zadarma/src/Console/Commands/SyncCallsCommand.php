@@ -24,7 +24,7 @@ class SyncCallsCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Pull call history from the Zadarma statistics API (polling mode) and upsert it into call_records.';
+    protected $description = 'Pull call history from the Zadarma PBX statistics API (polling mode) and upsert it into call_records.';
 
     /**
      * Zadarma allows a maximum query window of 30 days per request.
@@ -60,38 +60,49 @@ class SyncCallsCommand extends Command
         $start = $this->resolveWindowStart($end);
 
         $synced = 0;
-        $skip = 0;
 
         try {
-            do {
-                $response = $client->request('/v1/statistics/', [
-                    'start' => $start->format('Y-m-d H:i:s'),
-                    'end' => $end->format('Y-m-d H:i:s'),
-                    'skip' => $skip,
-                    'limit' => self::PAGE_SIZE,
-                ]);
+            // /v1/statistics/pbx/ — not /v1/statistics/ — is the endpoint that
+            // actually reflects calls routed through the PBX/extensions
+            // (i.e. everything our click-to-call button and normal office
+            // phone use produce). Confirmed for real: a call placed through
+            // this package showed up here but never in /v1/statistics/.
+            // call_type ('in'/'out') is a query filter, not a returned field,
+            // so it's queried twice to get a reliable direction per call —
+            // resolving the "unknown direction" limitation from Fase 3.
+            foreach (['in' => 'inbound', 'out' => 'outbound'] as $callType => $direction) {
+                $skip = 0;
 
-                $calls = $response['stats'] ?? [];
+                do {
+                    $response = $client->request('/v1/statistics/pbx/', [
+                        'start' => $start->format('Y-m-d H:i:s'),
+                        'end' => $end->format('Y-m-d H:i:s'),
+                        'call_type' => $callType,
+                        'skip' => $skip,
+                        'limit' => self::PAGE_SIZE,
+                    ]);
 
-                foreach ($calls as $call) {
-                    $record = $callRecordSync->upsert($this->normalize($call));
+                    $calls = $response['stats'] ?? [];
 
-                    // A call with no talk time was never answered, so it
-                    // can't have a recording — skip the extra API round
-                    // trip for those.
-                    if ($record && ! $record->recording_url && $record->duration > 0) {
-                        $link = $client->getRecordingLink($record->external_id);
+                    foreach ($calls as $call) {
+                        $record = $callRecordSync->upsert($this->normalize($call, $direction));
 
-                        if ($link) {
-                            $record->update(['recording_url' => $link]);
+                        if ($record && ! $record->recording_url && ! empty($call['is_recorded'])) {
+                            $callId = (string) ($call['pbx_call_id'] ?? $call['call_id'] ?? '');
+
+                            $link = $callId !== '' ? $client->getRecordingLink($callId) : null;
+
+                            if ($link) {
+                                $record->update(['recording_url' => $link]);
+                            }
                         }
+
+                        $synced++;
                     }
 
-                    $synced++;
-                }
-
-                $skip += self::PAGE_SIZE;
-            } while (count($calls) === self::PAGE_SIZE);
+                    $skip += self::PAGE_SIZE;
+                } while (count($calls) === self::PAGE_SIZE);
+            }
         } catch (Throwable $exception) {
             Log::error('Zadarma call sync failed.', ['exception' => $exception->getMessage()]);
 
@@ -130,26 +141,26 @@ class SyncCallsCommand extends Command
     }
 
     /**
-     * Map a raw /v1/statistics/ call record to the shape CallRecordSync expects.
-     *
-     * The exact field names below (particularly a direction indicator) are
-     * best-effort based on Zadarma's published docs and have not yet been
-     * verified against a live account — confirm during Fase 7.
+     * Map a raw /v1/statistics/pbx/ call record to the shape CallRecordSync
+     * expects. Field names confirmed for real against a live account
+     * (2026-07-07): call_id, sip, callstart, clid, destination, disposition,
+     * seconds, is_recorded, pbx_call_id.
      */
-    protected function normalize(array $call): array
+    protected function normalize(array $call, string $direction): array
     {
         return [
-            'external_id' => (string) ($call['id'] ?? ''),
-            'direction' => $call['call_type'] ?? $call['direction'] ?? 'unknown',
-            'from_number' => (string) ($call['from'] ?? ''),
-            'to_number' => (string) ($call['to'] ?? ''),
-            'duration' => (int) ($call['billseconds'] ?? 0),
+            'external_id' => (string) ($call['call_id'] ?? ''),
+            'direction' => $direction,
+            'from_number' => (string) ($call['clid'] ?? ''),
+            'to_number' => (string) ($call['destination'] ?? ''),
+            'duration' => (int) ($call['seconds'] ?? 0),
             'disposition' => $call['disposition'] ?? null,
             'recording_url' => null,
             // Zadarma returns callstart as a bare "Y-m-d H:i:s" string in UTC
-            // (best-effort assumption — see the note in handle() above) —
-            // convert it to the app's own timezone explicitly so it doesn't
-            // get silently misinterpreted as being in that timezone already.
+            // (best-effort assumption, consistent with the query window
+            // above) — convert it to the app's own timezone explicitly so it
+            // doesn't get silently misinterpreted as being in that timezone
+            // already.
             'started_at' => $call['callstart']
                 ? Carbon::parse($call['callstart'], 'UTC')->setTimezone(config('app.timezone'))
                 : null,
