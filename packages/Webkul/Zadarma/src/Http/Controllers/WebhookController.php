@@ -4,6 +4,7 @@ namespace Webkul\Zadarma\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Webkul\Zadarma\Models\CallRecord;
 use Webkul\Zadarma\Services\CallRecordSync;
@@ -67,7 +68,11 @@ class WebhookController
             'duration' => (int) $request->input('duration', 0),
             'disposition' => $request->input('disposition'),
             'recording_url' => null,
-            'started_at' => $request->input('call_start'),
+            // Best-effort assumption (see class docblock): treated as UTC,
+            // same as the polling path — see SyncCallsCommand::normalize().
+            'started_at' => $request->input('call_start')
+                ? Carbon::parse($request->input('call_start'), 'UTC')->setTimezone(config('app.timezone'))
+                : null,
             'sip' => $request->input('internal', $request->input('sip')),
         ]);
     }

@@ -49,7 +49,14 @@ class SyncCallsCommand extends Command
             return self::SUCCESS;
         }
 
-        $end = now();
+        // Zadarma's API (and the callstart timestamps it returns) is treated
+        // as UTC here, regardless of the Krayin installation's own
+        // APP_TIMEZONE — this app defaults to Asia/Kolkata, and sending
+        // bare app-timezone timestamps to Zadarma silently shifted every
+        // query window by the UTC offset, making the narrow recurring sync
+        // window miss real calls entirely (only caught because a manual
+        // resync happened to use a wide enough window to still overlap).
+        $end = now()->utc();
         $start = $this->resolveWindowStart($end);
 
         $synced = 0;
@@ -113,7 +120,9 @@ class SyncCallsCommand extends Command
     {
         $lastSyncedAt = CoreConfig::where('code', self::LAST_SYNCED_AT_CODE)->value('value');
 
-        $start = $lastSyncedAt ? Carbon::parse($lastSyncedAt) : $end->copy()->subDay();
+        // last_synced_at is always stored as a UTC timestamp (see handle()),
+        // so it must be parsed back as UTC too, not the app's local timezone.
+        $start = $lastSyncedAt ? Carbon::parse($lastSyncedAt, 'UTC') : $end->copy()->subDay();
 
         $earliestAllowed = $end->copy()->subDays(self::MAX_WINDOW_DAYS);
 
@@ -137,7 +146,13 @@ class SyncCallsCommand extends Command
             'duration' => (int) ($call['billseconds'] ?? 0),
             'disposition' => $call['disposition'] ?? null,
             'recording_url' => null,
-            'started_at' => $call['callstart'] ?? null,
+            // Zadarma returns callstart as a bare "Y-m-d H:i:s" string in UTC
+            // (best-effort assumption — see the note in handle() above) —
+            // convert it to the app's own timezone explicitly so it doesn't
+            // get silently misinterpreted as being in that timezone already.
+            'started_at' => $call['callstart']
+                ? Carbon::parse($call['callstart'], 'UTC')->setTimezone(config('app.timezone'))
+                : null,
             'sip' => $call['sip'] ?? null,
         ];
     }
