@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Webkul\Core\ViewRenderEventManager;
+use Webkul\Zadarma\Console\Commands\BackfillCallUsersCommand;
 use Webkul\Zadarma\Console\Commands\SyncCallsCommand;
 
 class ZadarmaServiceProvider extends ServiceProvider
@@ -89,6 +90,7 @@ class ZadarmaServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 SyncCallsCommand::class,
+                BackfillCallUsersCommand::class,
             ]);
         }
     }
